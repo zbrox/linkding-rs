@@ -17,7 +17,7 @@ serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
 thiserror = "1.0.65"
 uniffi = { version = "0.28.2", optional = true }
-ureq = { version = "2.10.1", features = ["json"] }
+ureq = { version = "3.0.0-rc2", features = ["json"] }
 
 [build-dependencies]
 uniffi = { version = "0.28.2", features = ["build"] }
