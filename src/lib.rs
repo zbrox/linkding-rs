@@ -23,8 +23,8 @@ pub enum LinkDingError {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
 pub enum Endpoint {
-    ListBookmarks(ListArgs),
-    ListArchivedBookmarks(ListArgs),
+    ListBookmarks(ListBookmarksArgs),
+    ListArchivedBookmarks(ListBookmarksArgs),
     GetBookmark(i32),
     CheckUrl(String),
     CreateBookmark,
@@ -32,6 +32,10 @@ pub enum Endpoint {
     ArchiveBookmark(i32),
     UnarchiveBookmark(i32),
     DeleteBookmark(i32),
+    ListTags(ListTagsArgs),
+    GetTag(i32),
+    CreateTag,
+    GetUserProfile,
 }
 
 impl TryInto<http::Uri> for Endpoint {
@@ -40,6 +44,12 @@ impl TryInto<http::Uri> for Endpoint {
     fn try_into(self) -> Result<http::Uri, Self::Error> {
         match self.clone() {
             Self::ListBookmarks(args) | Self::ListArchivedBookmarks(args) => {
+                let query_string = args.query_string();
+                let path: String = self.into();
+                http::Uri::try_from(format!("{}{}", path, query_string))
+                    .map_err(LinkDingError::InvalidUrl)
+            }
+            Self::ListTags(args) => {
                 let query_string = args.query_string();
                 let path: String = self.into();
                 http::Uri::try_from(format!("{}{}", path, query_string))
@@ -55,7 +65,10 @@ impl TryInto<http::Uri> for Endpoint {
             | Self::ArchiveBookmark(_)
             | Self::UnarchiveBookmark(_)
             | Self::DeleteBookmark(_)
-            | Self::CreateBookmark => {
+            | Self::CreateBookmark
+            | Self::GetTag(_)
+            | Self::CreateTag
+            | Self::GetUserProfile => {
                 let path: String = self.into();
                 http::Uri::try_from(path).map_err(LinkDingError::InvalidUrl)
             }
@@ -66,15 +79,18 @@ impl TryInto<http::Uri> for Endpoint {
 impl QueryString for Endpoint {
     fn query_string(&self) -> String {
         match self {
-            Self::ListBookmarks(args) => args.query_string(),
-            Self::ListArchivedBookmarks(args) => args.query_string(),
+            Self::ListBookmarks(args) | Self::ListArchivedBookmarks(args) => args.query_string(),
+            Self::ListTags(args) => args.query_string(),
             Self::GetBookmark(_)
             | Self::CheckUrl(_)
             | Self::CreateBookmark
             | Self::UpdateBookmark(_)
             | Self::ArchiveBookmark(_)
             | Self::UnarchiveBookmark(_)
-            | Self::DeleteBookmark(_) => "".to_string(),
+            | Self::DeleteBookmark(_)
+            | Self::GetTag(_)
+            | Self::CreateTag
+            | Self::GetUserProfile => "".to_string(),
         }
     }
 }
@@ -91,6 +107,9 @@ impl Into<String> for Endpoint {
             Self::CreateBookmark => "/api/bookmarks/".to_string(),
             Self::ArchiveBookmark(id) => format!("/api/bookmarks/{}/archive/", &id),
             Self::UnarchiveBookmark(id) => format!("/api/bookmarks/{}/unarchive/", &id),
+            Self::ListTags(_) | Self::CreateTag => "/api/tags/".to_string(),
+            Self::GetTag(id) => format!("/api/tags/{}/", &id),
+            Self::GetUserProfile => "/api/user/profile/".to_string(),
         }
     }
 }
@@ -107,6 +126,10 @@ impl Into<http::Method> for Endpoint {
             Self::ArchiveBookmark(_) => http::Method::POST,
             Self::UnarchiveBookmark(_) => http::Method::POST,
             Self::DeleteBookmark(_) => http::Method::DELETE,
+            Self::ListTags(_) => http::Method::GET,
+            Self::GetTag(_) => http::Method::GET,
+            Self::CreateTag => http::Method::POST,
+            Self::GetUserProfile => http::Method::GET,
         }
     }
 }
@@ -225,10 +248,65 @@ pub struct UpdateBookmarkBody {
     pub website_description: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct ListTagsResponse {
+    pub count: i32,
+    pub next: Option<String>,
+    pub previous: Option<String>,
+    pub results: Vec<TagData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct TagData {
+    id: i32,
+    name: String,
+    date_added: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct UserProfile {
+    theme: String,
+    bookmark_date_display: String,
+    bookmark_link_target: String,
+    web_archive_integration: String,
+    tag_search: String,
+    enable_sharing: bool,
+    enable_public_sharing: bool,
+    enable_favicons: bool,
+    display_url: bool,
+    permanent_notes: bool,
+    search_preferences: UserSearchPreferences,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct UserSearchPreferences {
+    pub sort: SortBy,
+    pub shared: bool,
+    pub unread: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
+pub enum SortBy {
+    TitleAsc,
+    TitleDesc,
+}
+
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
-pub struct ListArgs {
+pub struct ListBookmarksArgs {
     query: Option<String>,
+    limit: Option<i32>,
+    offset: Option<i32>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct ListTagsArgs {
     limit: Option<i32>,
     offset: Option<i32>,
 }
@@ -237,10 +315,23 @@ trait QueryString {
     fn query_string(&self) -> String;
 }
 
-impl QueryString for ListArgs {
+impl QueryString for ListBookmarksArgs {
     fn query_string(&self) -> String {
         vec![
             ("q", self.query.as_ref().map(|v| v.to_string())),
+            ("limit", self.limit.as_ref().map(|v| v.to_string())),
+            ("offset", self.offset.as_ref().map(|v| v.to_string())),
+        ]
+        .iter()
+        .filter_map(|(k, v)| v.as_ref().map(|v| format!("{}={}", k, v)))
+        .collect::<Vec<_>>()
+        .join("&")
+    }
+}
+
+impl QueryString for ListTagsArgs {
+    fn query_string(&self) -> String {
+        vec![
             ("limit", self.limit.as_ref().map(|v| v.to_string())),
             ("offset", self.offset.as_ref().map(|v| v.to_string())),
         ]
@@ -283,7 +374,10 @@ impl LinkDingClient {
         LinkDingClient { token, url }
     }
 
-    pub fn list_bookmarks(&self, args: ListArgs) -> Result<ListBookmarksResponse, LinkDingError> {
+    pub fn list_bookmarks(
+        &self,
+        args: ListBookmarksArgs,
+    ) -> Result<ListBookmarksResponse, LinkDingError> {
         let endpoint = Endpoint::ListBookmarks(args);
         let request = self.prepare_request(endpoint)?.body(())?;
         let body: ListBookmarksResponse = ureq::run(request)?.body_mut().read_json()?;
@@ -292,7 +386,7 @@ impl LinkDingClient {
 
     pub fn list_archived_bookmarks(
         &self,
-        args: ListArgs,
+        args: ListBookmarksArgs,
     ) -> Result<ListBookmarksResponse, LinkDingError> {
         let endpoint = Endpoint::ListArchivedBookmarks(args);
         let request = self.prepare_request(endpoint)?.body(())?;
@@ -354,5 +448,36 @@ impl LinkDingClient {
         let endpoint = Endpoint::DeleteBookmark(id);
         let request = self.prepare_request(endpoint)?.body(())?;
         Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
+    }
+
+    pub fn list_tags(&self, args: ListTagsArgs) -> Result<ListTagsResponse, LinkDingError> {
+        let endpoint = Endpoint::ListTags(args);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: ListTagsResponse = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    pub fn get_tag(&self, id: i32) -> Result<TagData, LinkDingError> {
+        let endpoint = Endpoint::GetTag(id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: TagData = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    pub fn create_tag(&self, name: &str) -> Result<TagData, LinkDingError> {
+        let endpoint = Endpoint::CreateTag;
+        let body = serde_json::json!({ "name": name });
+        let request = self
+            .prepare_request(endpoint)?
+            .body(serde_json::to_string(&body)?)?;
+        let body: TagData = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    pub fn get_user_profile(&self) -> Result<UserProfile, LinkDingError> {
+        let endpoint = Endpoint::GetUserProfile;
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: UserProfile = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
     }
 }
