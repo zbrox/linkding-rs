@@ -29,6 +29,9 @@ pub enum Endpoint {
     CheckUrl(String),
     CreateBookmark,
     UpdateBookmark(i32),
+    ArchiveBookmark(i32),
+    UnarchiveBookmark(i32),
+    DeleteBookmark(i32),
 }
 
 impl TryInto<http::Uri> for Endpoint {
@@ -42,16 +45,17 @@ impl TryInto<http::Uri> for Endpoint {
                 http::Uri::try_from(format!("{}{}", path, query_string))
                     .map_err(LinkDingError::InvalidUrl)
             }
-            Self::GetBookmark(id) | Self::UpdateBookmark(id) => {
-                let path: String = self.into();
-                http::Uri::try_from(format!("{}{}", path, id)).map_err(LinkDingError::InvalidUrl)
-            }
             Self::CheckUrl(url) => {
                 let path: String = self.into();
                 http::Uri::try_from(format!("{}?url={}", path, url))
                     .map_err(LinkDingError::InvalidUrl)
             }
-            Self::CreateBookmark => {
+            Self::GetBookmark(_)
+            | Self::UpdateBookmark(_)
+            | Self::ArchiveBookmark(_)
+            | Self::UnarchiveBookmark(_)
+            | Self::DeleteBookmark(_)
+            | Self::CreateBookmark => {
                 let path: String = self.into();
                 http::Uri::try_from(path).map_err(LinkDingError::InvalidUrl)
             }
@@ -67,7 +71,10 @@ impl QueryString for Endpoint {
             Self::GetBookmark(_)
             | Self::CheckUrl(_)
             | Self::CreateBookmark
-            | Self::UpdateBookmark(_) => "".to_string(),
+            | Self::UpdateBookmark(_)
+            | Self::ArchiveBookmark(_)
+            | Self::UnarchiveBookmark(_)
+            | Self::DeleteBookmark(_) => "".to_string(),
         }
     }
 }
@@ -77,11 +84,13 @@ impl Into<String> for Endpoint {
         match &self {
             Self::ListBookmarks(_) => "/api/bookmarks/".to_string(),
             Self::ListArchivedBookmarks(_) => "/api/bookmarks/archived/".to_string(),
-            Self::GetBookmark(id) | Self::UpdateBookmark(id) => {
+            Self::GetBookmark(id) | Self::UpdateBookmark(id) | Self::DeleteBookmark(id) => {
                 format!("/api/bookmarks/{}/", &id)
             }
             Self::CheckUrl(_) => "/api/bookmarks/check/".to_string(),
             Self::CreateBookmark => "/api/bookmarks/".to_string(),
+            Self::ArchiveBookmark(id) => format!("/api/bookmarks/{}/archive/", &id),
+            Self::UnarchiveBookmark(id) => format!("/api/bookmarks/{}/unarchive/", &id),
         }
     }
 }
@@ -95,6 +104,9 @@ impl Into<http::Method> for Endpoint {
             Self::CheckUrl(_) => http::Method::GET,
             Self::CreateBookmark => http::Method::POST,
             Self::UpdateBookmark(_) => http::Method::PATCH,
+            Self::ArchiveBookmark(_) => http::Method::POST,
+            Self::UnarchiveBookmark(_) => http::Method::POST,
+            Self::DeleteBookmark(_) => http::Method::DELETE,
         }
     }
 }
@@ -322,5 +334,25 @@ impl LinkDingClient {
             .body(serde_json::to_string(&body)?)?;
         let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
         Ok(body)
+    }
+
+    pub fn archive_bookmark(&self, id: i32) -> Result<Bookmark, LinkDingError> {
+        let endpoint = Endpoint::ArchiveBookmark(id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    pub fn unarchive_bookmark(&self, id: i32) -> Result<Bookmark, LinkDingError> {
+        let endpoint = Endpoint::UnarchiveBookmark(id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    pub fn delete_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
+        let endpoint = Endpoint::DeleteBookmark(id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
     }
 }
