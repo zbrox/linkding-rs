@@ -235,18 +235,16 @@ impl LinkDingClient {
         Ok(body)
     }
 
-    pub fn archive_bookmark(&self, id: i32) -> Result<Bookmark, LinkDingError> {
+    pub fn archive_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::ArchiveBookmark(id);
         let request = self.prepare_request(endpoint)?.body(())?;
-        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
-        Ok(body)
+        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
     }
 
-    pub fn unarchive_bookmark(&self, id: i32) -> Result<Bookmark, LinkDingError> {
+    pub fn unarchive_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::UnarchiveBookmark(id);
         let request = self.prepare_request(endpoint)?.body(())?;
-        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
-        Ok(body)
+        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
     }
 
     pub fn delete_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
