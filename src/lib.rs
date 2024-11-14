@@ -5,13 +5,13 @@ pub mod bookmarks;
 pub mod tags;
 pub mod users;
 
-use bookmarks::{
+pub use bookmarks::{
     Bookmark, CheckUrlResponse, CreateBookmarkBody, ListBookmarksArgs, ListBookmarksResponse,
     UpdateBookmarkBody,
 };
-use tags::{ListTagsArgs, ListTagsResponse, TagData};
+pub use tags::{ListTagsArgs, ListTagsResponse, TagData};
 use thiserror::Error;
-use users::UserProfile;
+pub use users::UserProfile;
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Error))]
@@ -175,8 +175,11 @@ impl LinkDingClient {
 #[cfg_attr(feature = "ffi", uniffi::export)]
 impl LinkDingClient {
     #[cfg_attr(feature = "ffi", uniffi::constructor)]
-    pub fn new(url: String, token: String) -> Self {
-        LinkDingClient { token, url }
+    pub fn new(url: &str, token: &str) -> Self {
+        LinkDingClient {
+            token: token.to_string(),
+            url: url.to_string(),
+        }
     }
 
     pub fn list_bookmarks(

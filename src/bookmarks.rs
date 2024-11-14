@@ -49,7 +49,7 @@ pub struct CheckUrlResponse {
     pub auto_tags: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 pub struct CreateBookmarkBody {
     pub url: String,
@@ -83,7 +83,7 @@ pub struct CreateBookmarkBody {
     pub website_description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 pub struct UpdateBookmarkBody {
     #[serde(skip_serializing_if = "Option::is_none")]
