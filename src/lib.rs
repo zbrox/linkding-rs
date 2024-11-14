@@ -11,7 +11,7 @@ pub use bookmarks::{
 };
 pub use tags::{ListTagsArgs, ListTagsResponse, TagData};
 use thiserror::Error;
-pub use users::UserProfile;
+pub use users::{DateDisplay, LinkTarget, SelectedTheme, SortBy, TagSearchMethod, UserProfile};
 
 #[derive(Error, Debug)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Error))]
