@@ -1,0 +1,82 @@
+name: Release
+on:
+  push:
+    tags: ["*"]
+
+jobs:
+  # from https://stackoverflow.com/questions/63745613/how-to-get-a-branch-name-on-github-action-when-push-on-a-tag/77727776#77727776
+  check-current-branch:
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.check_step.outputs.branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get current branch
+        id: check_step
+        # 1. Get the list of branches ref where this tag exists
+        # 2. Remove 'origin/' from that result
+        # 3. Put that string in output
+        # => We can now use function 'contains(list, item)''
+        run: |
+          raw=$(git branch -r --contains ${{ github.ref }})
+          branch="$(echo ${raw//origin\//} | tr -d '\n')"
+          echo "{name}=branch" >> $GITHUB_OUTPUT
+          echo "Branches where this tag exists : $branch."
+  swift_package:
+    name: Swift Package
+    runs-on: macos-latest
+    if: contains(${{ needs.check.outputs.branch }}, 'main')`
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Cargo Swift
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-swift
+      - name: Build Swift Package
+        run: cargo swift package --features ffi --silent --release --name linkding --accept-all
+      - name: Archive Swift Package
+        run: zip -r swift.zip linkding
+      - name: Set tag name
+        id: tag
+        run: |
+          tag=$(basename "${{ github.ref }}")
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+      - name: Create Release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh release create --draft "$tag" --title "$tag"
+      - name: Upload ZIP file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" swift.zip
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "${{ steps.tag.outputs.tag }}" --draft=false
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: contains(${{ needs.check.outputs.branch }}, 'main')`
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Publish
+        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
