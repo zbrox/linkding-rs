@@ -1,0 +1,50 @@
+name: Release
+on:
+  push:
+    tags: ["*"]
+
+jobs:
+  swift_package:
+    name: Swift Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Cargo Swift
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-swift
+      - name: Build Swift Package
+        run: cargo swift package --features ffi --silent --release --name linkding --accept-all
+      - name: Archive Swift Package
+        run: zip -r swift.zip linkding
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload ZIP file
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: swift.zip
+          asset_name: swift.zip
+          asset_content_type: application/zip
+
+  # release:
+  #   name: Release
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #     - name: Install Rust
+  #       uses: dtolnay/rust-toolchain@stable
+  #     - name: Publish
+  #       run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
