@@ -4,34 +4,89 @@ on:
     tags: ["*"]
 
 jobs:
-  # from https://stackoverflow.com/questions/63745613/how-to-get-a-branch-name-on-github-action-when-push-on-a-tag/77727776#77727776
-  check-current-branch:
+  set_tag_name:
+    name: Set tag name
     runs-on: ubuntu-latest
     outputs:
-      branch: ${{ steps.check_step.outputs.branch }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Set tag name
+        id: tag
+        run: |
+          tag=$(basename "${{ github.ref }}")
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
+  create_release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: set_tag_name
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install git-cliff
+        uses: taiki-e/install-action@git-cliff
+      - name: Create Release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ needs.set_tag_name.outputs.tag }}"
+          latest_changelog=$(git cliff --tag "$tag")
+          gh release create --draft "$tag" --title "$tag" --notes "$latest_changelog"
+
+  update_changelog:
+    name: Update changelog
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: set_tag_name
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get current branch
-        id: check_step
-        # 1. Get the list of branches ref where this tag exists
-        # 2. Remove 'origin/' from that result
-        # 3. Put that string in output
-        # => We can now use function 'contains(list, item)''
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Commit
         run: |
-          raw=$(git branch -r --contains ${{ github.ref }})
-          branch="$(echo ${raw//origin\//} | tr -d '\n')"
-          echo "{name}=branch" >> $GITHUB_OUTPUT
-          echo "Branches where this tag exists : $branch."
+          git checkout main
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          set +e
+          git add CHANGELOG.md
+          git commit -m "Update changelog"
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git main
+
   swift_package:
     name: Swift Package
     runs-on: macos-latest
-    if: contains(${{ needs.check.outputs.branch }}, 'main')`
     permissions:
       contents: write
+    needs: [set_tag_name, create_release]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,37 +97,44 @@ jobs:
         with:
           tool: cargo-swift
       - name: Build Swift Package
-        run: cargo swift package --features ffi --silent --release --name linkding --accept-all
+        run: cargo swift package --features ffi --release --name linkding --accept-all
       - name: Archive Swift Package
         run: zip -r swift.zip linkding
-      - name: Set tag name
-        id: tag
-        run: |
-          tag=$(basename "${{ github.ref }}")
-          echo "tag=$tag" >> $GITHUB_OUTPUT
-      - name: Create Release
-        id: create_release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          gh release create --draft "$tag" --title "$tag"
       - name: Upload ZIP file
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ steps.tag.outputs.tag }}" swift.zip
+        run: |
+          tag="${{ needs.set_tag_name.outputs.tag }}"
+          gh release upload "$tag" swift.zip
+
+  # kotlin_package:
+  #   name: Kotlin Package
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
+  #   needs: create_release
+  #   TODO
+
+  publish_release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [set_tag_name, swift_package]
+    steps:
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "${{ steps.tag.outputs.tag }}" --draft=false
+        run: |
+          tag="${{ needs.set_tag_name.outputs.tag }}"
+          gh release edit "$tag" --draft=false
 
-  release:
-    name: Release
+  publish:
+    name: Publish crate
     runs-on: ubuntu-latest
-    if: contains(${{ needs.check.outputs.branch }}, 'main')`
+    needs: publish_release
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,0 +1,32 @@
+# git-cliff ~ configuration file
+# https://git-cliff.org/docs/configuration
+[git]
+filter_commits = true
+conventional_commits = true
+filter_unconventional = true
+commit_parsers = [
+    { message = "^feat*", group = "<!-- 0 -->Features" },
+    { message = "^fix*", group = "<!-- 1 -->Bug Fixes" },
+    { message = "^chore*", group = "<!-- 3 -->Miscellaneous" },
+    { message = "^doc(s)?*", group = "<!-- 4 -->Documentation" },
+    { message = "^refactor*", group = "<!-- 5 -->Refactor" },
+    { message = "^style*", group = "<!-- 6 -->Styling" },
+    { message = "^test*", group = "<!-- 7 -->Testing" },
+]
+
+[changelog]
+# template for the changelog body
+# https://keats.github.io/tera/docs/#introduction
+body = """
+{% if version %}\
+    ## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}\
+{% else %}\
+    ## Unreleased\
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}\
+        - {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
+    {% endfor %}\
+{% endfor %}\n
+"""
