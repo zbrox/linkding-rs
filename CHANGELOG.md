@@ -1,3 +1,10 @@
+## 0.2.0 - 2025-03-29
+### Bug Fixes
+- Make some needed fields public
+
+### Miscellaneous
+- Bump up version to 0.2.0
+
 ## 0.1.0 - 2024-11-17
 ### Features
 - Add some simple uniffi bindings setup
