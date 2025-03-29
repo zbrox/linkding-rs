@@ -14,16 +14,16 @@ pub struct ListTagsResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 pub struct TagData {
-    id: i32,
-    name: String,
-    date_added: String,
+    pub id: i32,
+    pub name: String,
+    pub date_added: String,
 }
 
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 pub struct ListTagsArgs {
-    limit: Option<i32>,
-    offset: Option<i32>,
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 impl QueryString for ListTagsArgs {

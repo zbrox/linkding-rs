@@ -119,9 +119,9 @@ pub struct UpdateBookmarkBody {
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
 pub struct ListBookmarksArgs {
-    query: Option<String>,
-    limit: Option<i32>,
-    offset: Option<i32>,
+    pub query: Option<String>,
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
 }
 
 impl QueryString for ListBookmarksArgs {
