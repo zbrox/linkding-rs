@@ -126,7 +126,7 @@ pub struct ListBookmarksArgs {
 
 impl QueryString for ListBookmarksArgs {
     fn query_string(&self) -> String {
-        vec![
+        [
             ("q", self.query.as_ref().map(|v| v.to_string())),
             ("limit", self.limit.as_ref().map(|v| v.to_string())),
             ("offset", self.offset.as_ref().map(|v| v.to_string())),

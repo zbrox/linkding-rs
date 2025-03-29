@@ -122,81 +122,83 @@ impl QueryString for Endpoint {
     }
 }
 
-impl Into<String> for Endpoint {
-    fn into(self) -> String {
-        match &self {
-            Self::ListBookmarks(_) => "/api/bookmarks/".to_string(),
-            Self::ListArchivedBookmarks(_) => "/api/bookmarks/archived/".to_string(),
-            Self::GetBookmark(id) | Self::UpdateBookmark(id) | Self::DeleteBookmark(id) => {
+impl From<Endpoint> for String {
+    fn from(val: Endpoint) -> Self {
+        match &val {
+            Endpoint::ListBookmarks(_) => "/api/bookmarks/".to_string(),
+            Endpoint::ListArchivedBookmarks(_) => "/api/bookmarks/archived/".to_string(),
+            Endpoint::GetBookmark(id)
+            | Endpoint::UpdateBookmark(id)
+            | Endpoint::DeleteBookmark(id) => {
                 format!("/api/bookmarks/{}/", &id)
             }
-            Self::CheckUrl(_) => "/api/bookmarks/check/".to_string(),
-            Self::CreateBookmark => "/api/bookmarks/".to_string(),
-            Self::ArchiveBookmark(id) => format!("/api/bookmarks/{}/archive/", &id),
-            Self::UnarchiveBookmark(id) => format!("/api/bookmarks/{}/unarchive/", &id),
-            Self::ListTags(_) | Self::CreateTag => "/api/tags/".to_string(),
-            Self::GetTag(id) => format!("/api/tags/{}/", &id),
-            Self::GetUserProfile => "/api/user/profile/".to_string(),
-            Self::ListBookmarkAssets(id) => format!("/api/bookmarks/{}/assets/", id),
-            Self::RetrieveBookmarkAsset(bookmark_id, asset_id)
-            | Self::DeleteBookmarkAsset(bookmark_id, asset_id) => {
+            Endpoint::CheckUrl(_) => "/api/bookmarks/check/".to_string(),
+            Endpoint::CreateBookmark => "/api/bookmarks/".to_string(),
+            Endpoint::ArchiveBookmark(id) => format!("/api/bookmarks/{}/archive/", &id),
+            Endpoint::UnarchiveBookmark(id) => format!("/api/bookmarks/{}/unarchive/", &id),
+            Endpoint::ListTags(_) | Endpoint::CreateTag => "/api/tags/".to_string(),
+            Endpoint::GetTag(id) => format!("/api/tags/{}/", &id),
+            Endpoint::GetUserProfile => "/api/user/profile/".to_string(),
+            Endpoint::ListBookmarkAssets(id) => format!("/api/bookmarks/{}/assets/", id),
+            Endpoint::RetrieveBookmarkAsset(bookmark_id, asset_id)
+            | Endpoint::DeleteBookmarkAsset(bookmark_id, asset_id) => {
                 format!("/api/bookmarks/{}/assets/{}/", bookmark_id, asset_id)
             }
-            Self::DownloadBookmarkAsset(bookmark_id, asset_id) => format!(
+            Endpoint::DownloadBookmarkAsset(bookmark_id, asset_id) => format!(
                 "/api/bookmarks/{}/assets/{}/download/",
                 bookmark_id, asset_id
             ),
-            Self::UploadBookmarkAsset(id) => format!("/api/bookmarks/{}/assets/upload/", id),
+            Endpoint::UploadBookmarkAsset(id) => format!("/api/bookmarks/{}/assets/upload/", id),
         }
     }
 }
 
-impl Into<http::Method> for Endpoint {
-    fn into(self) -> http::Method {
-        match self {
-            Self::ListBookmarks(_) => http::Method::GET,
-            Self::ListArchivedBookmarks(_) => http::Method::GET,
-            Self::GetBookmark(_) => http::Method::GET,
-            Self::CheckUrl(_) => http::Method::GET,
-            Self::CreateBookmark => http::Method::POST,
-            Self::UpdateBookmark(_) => http::Method::PATCH,
-            Self::ArchiveBookmark(_) => http::Method::POST,
-            Self::UnarchiveBookmark(_) => http::Method::POST,
-            Self::DeleteBookmark(_) => http::Method::DELETE,
-            Self::ListTags(_) => http::Method::GET,
-            Self::GetTag(_) => http::Method::GET,
-            Self::CreateTag => http::Method::POST,
-            Self::GetUserProfile => http::Method::GET,
-            Self::ListBookmarkAssets(_) => http::Method::GET,
-            Self::RetrieveBookmarkAsset(_, _) => http::Method::GET,
-            Self::DownloadBookmarkAsset(_, _) => http::Method::GET,
-            Self::UploadBookmarkAsset(_) => http::Method::POST,
-            Self::DeleteBookmarkAsset(_, _) => http::Method::DELETE,
+impl From<Endpoint> for http::Method {
+    fn from(val: Endpoint) -> Self {
+        match val {
+            Endpoint::ListBookmarks(_) => http::Method::GET,
+            Endpoint::ListArchivedBookmarks(_) => http::Method::GET,
+            Endpoint::GetBookmark(_) => http::Method::GET,
+            Endpoint::CheckUrl(_) => http::Method::GET,
+            Endpoint::CreateBookmark => http::Method::POST,
+            Endpoint::UpdateBookmark(_) => http::Method::PATCH,
+            Endpoint::ArchiveBookmark(_) => http::Method::POST,
+            Endpoint::UnarchiveBookmark(_) => http::Method::POST,
+            Endpoint::DeleteBookmark(_) => http::Method::DELETE,
+            Endpoint::ListTags(_) => http::Method::GET,
+            Endpoint::GetTag(_) => http::Method::GET,
+            Endpoint::CreateTag => http::Method::POST,
+            Endpoint::GetUserProfile => http::Method::GET,
+            Endpoint::ListBookmarkAssets(_) => http::Method::GET,
+            Endpoint::RetrieveBookmarkAsset(_, _) => http::Method::GET,
+            Endpoint::DownloadBookmarkAsset(_, _) => http::Method::GET,
+            Endpoint::UploadBookmarkAsset(_) => http::Method::POST,
+            Endpoint::DeleteBookmarkAsset(_, _) => http::Method::DELETE,
         }
     }
 }
 
-impl Into<http::HeaderMap> for Endpoint {
-    fn into(self) -> http::HeaderMap {
+impl From<Endpoint> for http::HeaderMap {
+    fn from(val: Endpoint) -> Self {
         let mut headers = http::HeaderMap::new();
-        match self {
-            Self::ListBookmarks(_)
-            | Self::ListArchivedBookmarks(_)
-            | Self::GetBookmark(_)
-            | Self::CheckUrl(_)
-            | Self::CreateBookmark
-            | Self::UpdateBookmark(_)
-            | Self::ArchiveBookmark(_)
-            | Self::UnarchiveBookmark(_)
-            | Self::DeleteBookmark(_)
-            | Self::ListTags(_)
-            | Self::GetTag(_)
-            | Self::CreateTag
-            | Self::GetUserProfile
-            | Self::ListBookmarkAssets(_)
-            | Self::RetrieveBookmarkAsset(_, _)
-            | Self::UploadBookmarkAsset(_)
-            | Self::DeleteBookmarkAsset(_, _) => {
+        match val {
+            Endpoint::ListBookmarks(_)
+            | Endpoint::ListArchivedBookmarks(_)
+            | Endpoint::GetBookmark(_)
+            | Endpoint::CheckUrl(_)
+            | Endpoint::CreateBookmark
+            | Endpoint::UpdateBookmark(_)
+            | Endpoint::ArchiveBookmark(_)
+            | Endpoint::UnarchiveBookmark(_)
+            | Endpoint::DeleteBookmark(_)
+            | Endpoint::ListTags(_)
+            | Endpoint::GetTag(_)
+            | Endpoint::CreateTag
+            | Endpoint::GetUserProfile
+            | Endpoint::ListBookmarkAssets(_)
+            | Endpoint::RetrieveBookmarkAsset(_, _)
+            | Endpoint::UploadBookmarkAsset(_)
+            | Endpoint::DeleteBookmarkAsset(_, _) => {
                 headers.insert(
                     CONTENT_TYPE,
                     "application/json"
@@ -210,7 +212,7 @@ impl Into<http::HeaderMap> for Endpoint {
                         .expect("Could not parse accept header value"),
                 );
             }
-            Self::DownloadBookmarkAsset(_, _) => {}
+            Endpoint::DownloadBookmarkAsset(_, _) => {}
         };
         headers
     }

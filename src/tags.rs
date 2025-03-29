@@ -28,7 +28,7 @@ pub struct ListTagsArgs {
 
 impl QueryString for ListTagsArgs {
     fn query_string(&self) -> String {
-        vec![
+        [
             ("limit", self.limit.as_ref().map(|v| v.to_string())),
             ("offset", self.offset.as_ref().map(|v| v.to_string())),
         ]
