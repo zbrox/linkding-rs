@@ -1,14 +1,17 @@
 #[cfg(feature = "ffi")]
 uniffi::setup_scaffolding!();
 
+pub mod bookmark_assets;
 pub mod bookmarks;
 pub mod tags;
 pub mod users;
 
+use bookmark_assets::{BookmarkAsset, ListBookmarkAssetsResponse};
 pub use bookmarks::{
     Bookmark, CheckUrlResponse, CreateBookmarkBody, ListBookmarksArgs, ListBookmarksResponse,
     UpdateBookmarkBody,
 };
+use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 pub use tags::{ListTagsArgs, ListTagsResponse, TagData};
 use thiserror::Error;
 pub use users::{DateDisplay, LinkTarget, SelectedTheme, SortBy, TagSearchMethod, UserProfile};
@@ -45,6 +48,11 @@ pub enum Endpoint {
     GetTag(i32),
     CreateTag,
     GetUserProfile,
+    ListBookmarkAssets(i32),
+    RetrieveBookmarkAsset(i32, i32),
+    DownloadBookmarkAsset(i32, i32),
+    UploadBookmarkAsset(i32),
+    DeleteBookmarkAsset(i32, i32),
 }
 
 impl TryInto<http::Uri> for Endpoint {
@@ -77,7 +85,12 @@ impl TryInto<http::Uri> for Endpoint {
             | Self::CreateBookmark
             | Self::GetTag(_)
             | Self::CreateTag
-            | Self::GetUserProfile => {
+            | Self::GetUserProfile
+            | Self::ListBookmarkAssets(_)
+            | Self::RetrieveBookmarkAsset(_, _)
+            | Self::DownloadBookmarkAsset(_, _)
+            | Self::UploadBookmarkAsset(_)
+            | Self::DeleteBookmarkAsset(_, _) => {
                 let path: String = self.into();
                 http::Uri::try_from(path).map_err(LinkDingError::InvalidUrl)
             }
@@ -99,7 +112,12 @@ impl QueryString for Endpoint {
             | Self::DeleteBookmark(_)
             | Self::GetTag(_)
             | Self::CreateTag
-            | Self::GetUserProfile => "".to_string(),
+            | Self::GetUserProfile
+            | Self::ListBookmarkAssets(_)
+            | Self::RetrieveBookmarkAsset(_, _)
+            | Self::DownloadBookmarkAsset(_, _)
+            | Self::UploadBookmarkAsset(_)
+            | Self::DeleteBookmarkAsset(_, _) => "".to_string(),
         }
     }
 }
@@ -119,6 +137,16 @@ impl Into<String> for Endpoint {
             Self::ListTags(_) | Self::CreateTag => "/api/tags/".to_string(),
             Self::GetTag(id) => format!("/api/tags/{}/", &id),
             Self::GetUserProfile => "/api/user/profile/".to_string(),
+            Self::ListBookmarkAssets(id) => format!("/api/bookmarks/{}/assets/", id),
+            Self::RetrieveBookmarkAsset(bookmark_id, asset_id)
+            | Self::DeleteBookmarkAsset(bookmark_id, asset_id) => {
+                format!("/api/bookmarks/{}/assets/{}/", bookmark_id, asset_id)
+            }
+            Self::DownloadBookmarkAsset(bookmark_id, asset_id) => format!(
+                "/api/bookmarks/{}/assets/{}/download/",
+                bookmark_id, asset_id
+            ),
+            Self::UploadBookmarkAsset(id) => format!("/api/bookmarks/{}/assets/upload/", id),
         }
     }
 }
@@ -139,7 +167,52 @@ impl Into<http::Method> for Endpoint {
             Self::GetTag(_) => http::Method::GET,
             Self::CreateTag => http::Method::POST,
             Self::GetUserProfile => http::Method::GET,
+            Self::ListBookmarkAssets(_) => http::Method::GET,
+            Self::RetrieveBookmarkAsset(_, _) => http::Method::GET,
+            Self::DownloadBookmarkAsset(_, _) => http::Method::GET,
+            Self::UploadBookmarkAsset(_) => http::Method::POST,
+            Self::DeleteBookmarkAsset(_, _) => http::Method::DELETE,
         }
+    }
+}
+
+impl Into<http::HeaderMap> for Endpoint {
+    fn into(self) -> http::HeaderMap {
+        let mut headers = http::HeaderMap::new();
+        match self {
+            Self::ListBookmarks(_)
+            | Self::ListArchivedBookmarks(_)
+            | Self::GetBookmark(_)
+            | Self::CheckUrl(_)
+            | Self::CreateBookmark
+            | Self::UpdateBookmark(_)
+            | Self::ArchiveBookmark(_)
+            | Self::UnarchiveBookmark(_)
+            | Self::DeleteBookmark(_)
+            | Self::ListTags(_)
+            | Self::GetTag(_)
+            | Self::CreateTag
+            | Self::GetUserProfile
+            | Self::ListBookmarkAssets(_)
+            | Self::RetrieveBookmarkAsset(_, _)
+            | Self::UploadBookmarkAsset(_)
+            | Self::DeleteBookmarkAsset(_, _) => {
+                headers.insert(
+                    CONTENT_TYPE,
+                    "application/json"
+                        .parse()
+                        .expect("Could not parse content type header value"),
+                );
+                headers.insert(
+                    ACCEPT,
+                    "application/json"
+                        .parse()
+                        .expect("Could not parse accept header value"),
+                );
+            }
+            Self::DownloadBookmarkAsset(_, _) => {}
+        };
+        headers
     }
 }
 
@@ -186,12 +259,24 @@ impl LinkDingClient {
             .build()
             .map_err(LinkDingError::ParseUrlError)?;
 
-        Ok(http::request::Builder::new()
-            .method(endpoint)
-            .uri(uri)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .header("Authorization", &format!("Token {}", &self.token)))
+        let mut builder = http::request::Builder::new()
+            .method(endpoint.clone())
+            .uri(uri);
+
+        let endpoint_headers: http::HeaderMap = endpoint.clone().into();
+        let request_header_map = builder
+            .headers_mut()
+            .expect("Could not get mutable reference to request headers");
+        for (header_key, header_value) in endpoint_headers.iter() {
+            request_header_map.insert(header_key.clone(), header_value.clone());
+        }
+        request_header_map.insert(
+            AUTHORIZATION,
+            format!("Token {}", &self.token)
+                .parse()
+                .expect("Could not parse authorization header value"),
+        );
+        Ok(builder)
     }
 }
 
@@ -329,5 +414,63 @@ impl LinkDingClient {
         let request = self.prepare_request(endpoint)?.body(())?;
         let body: UserProfile = ureq::run(request)?.body_mut().read_json()?;
         Ok(body)
+    }
+
+    /// Lists a bookmarks' assets
+    pub fn list_bookmark_assets(
+        &self,
+        id: i32,
+    ) -> Result<ListBookmarkAssetsResponse, LinkDingError> {
+        let endpoint = Endpoint::ListBookmarkAssets(id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: ListBookmarkAssetsResponse = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    /// Retrieve info for a single asset of a bookmark
+    pub fn retrieve_bookmark_asset(
+        &self,
+        bookmark_id: i32,
+        asset_id: i32,
+    ) -> Result<BookmarkAsset, LinkDingError> {
+        let endpoint = Endpoint::RetrieveBookmarkAsset(bookmark_id, asset_id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let body: BookmarkAsset = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    /// Download a bookmark's asset
+    pub fn download_bookmark_asset(
+        &self,
+        bookmark_id: i32,
+        asset_id: i32,
+    ) -> Result<Vec<u8>, LinkDingError> {
+        let endpoint = Endpoint::DownloadBookmarkAsset(bookmark_id, asset_id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        let mut response = ureq::run(request)?;
+        Ok(response.body_mut().read_to_vec()?)
+    }
+
+    /// Upload an asset for a bookmark
+    pub fn upload_bookmark_asset(
+        &self,
+        bookmark_id: i32,
+        bytes: &[u8],
+    ) -> Result<BookmarkAsset, LinkDingError> {
+        let endpoint = Endpoint::UploadBookmarkAsset(bookmark_id);
+        let request = self.prepare_request(endpoint)?.body(bytes)?;
+        let body: BookmarkAsset = ureq::run(request)?.body_mut().read_json()?;
+        Ok(body)
+    }
+
+    /// Delete a bookmark's asset
+    pub fn delete_bookmark_asset(
+        &self,
+        bookmark_id: i32,
+        asset_id: i32,
+    ) -> Result<bool, LinkDingError> {
+        let endpoint = Endpoint::DeleteBookmarkAsset(bookmark_id, asset_id);
+        let request = self.prepare_request(endpoint)?.body(())?;
+        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
     }
 }
