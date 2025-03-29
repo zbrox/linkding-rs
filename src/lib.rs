@@ -63,13 +63,13 @@ impl TryInto<http::Uri> for Endpoint {
             Self::ListBookmarks(args) | Self::ListArchivedBookmarks(args) => {
                 let query_string = args.query_string();
                 let path: String = self.into();
-                http::Uri::try_from(format!("{}{}", path, query_string))
+                http::Uri::try_from(format!("{}?{}", path, query_string))
                     .map_err(LinkDingError::InvalidUrl)
             }
             Self::ListTags(args) => {
                 let query_string = args.query_string();
                 let path: String = self.into();
-                http::Uri::try_from(format!("{}{}", path, query_string))
+                http::Uri::try_from(format!("{}?{}", path, query_string))
                     .map_err(LinkDingError::InvalidUrl)
             }
             Self::CheckUrl(url) => {
