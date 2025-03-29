@@ -26,8 +26,8 @@ pub enum LinkDingError {
     ParseUrlError(#[from] http::Error),
     #[error("Error sending HTTP request")]
     SendHttpError(#[from] ureq::Error),
-    #[error("Could not parse JSON response from API")]
-    JsonParse(#[from] std::io::Error),
+    #[error("Could not parse response from API")]
+    ParseResponse(#[from] std::io::Error),
     #[error("Could not serialize JSON body")]
     JsonSerialize(#[from] serde_json::Error),
 }
