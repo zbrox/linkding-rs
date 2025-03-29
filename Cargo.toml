@@ -1,6 +1,6 @@
 [package]
 name = "linkding-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A Rust library for interacting with the Linkding API"
 repository = "https://github.com/zbrox/linkding-rs"
