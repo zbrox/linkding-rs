@@ -6,12 +6,18 @@ pub mod bookmarks;
 pub mod tags;
 pub mod users;
 
+use std::io::Read;
+
 use bookmark_assets::{BookmarkAsset, ListBookmarkAssetsResponse};
 pub use bookmarks::{
     Bookmark, CheckUrlResponse, CreateBookmarkBody, ListBookmarksArgs, ListBookmarksResponse,
     UpdateBookmarkBody,
 };
-use http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::{
+    blocking::multipart::Part,
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    StatusCode,
+};
 pub use tags::{ListTagsArgs, ListTagsResponse, TagData};
 use thiserror::Error;
 pub use users::{DateDisplay, LinkTarget, SelectedTheme, SortBy, TagSearchMethod, UserProfile};
@@ -20,12 +26,10 @@ pub use users::{DateDisplay, LinkTarget, SelectedTheme, SortBy, TagSearchMethod,
 #[cfg_attr(feature = "ffi", derive(uniffi::Error))]
 #[cfg_attr(feature = "ffi", uniffi(flat_error))]
 pub enum LinkDingError {
-    #[error("Invalid URL")]
-    InvalidUrl(#[from] http::uri::InvalidUri),
     #[error("Error building URL")]
-    ParseUrlError(#[from] http::Error),
+    ParseUrl(url::ParseError),
     #[error("Error sending HTTP request")]
-    SendHttpError(#[from] ureq::Error),
+    SendHttpError(#[from] reqwest::Error),
     #[error("Could not parse response from API")]
     ParseResponse(#[from] std::io::Error),
     #[error("Could not serialize JSON body")]
@@ -55,49 +59,6 @@ pub enum Endpoint {
     DeleteBookmarkAsset(i32, i32),
 }
 
-impl TryInto<http::Uri> for Endpoint {
-    type Error = LinkDingError;
-
-    fn try_into(self) -> Result<http::Uri, Self::Error> {
-        match self.clone() {
-            Self::ListBookmarks(args) | Self::ListArchivedBookmarks(args) => {
-                let query_string = args.query_string();
-                let path: String = self.into();
-                http::Uri::try_from(format!("{}?{}", path, query_string))
-                    .map_err(LinkDingError::InvalidUrl)
-            }
-            Self::ListTags(args) => {
-                let query_string = args.query_string();
-                let path: String = self.into();
-                http::Uri::try_from(format!("{}?{}", path, query_string))
-                    .map_err(LinkDingError::InvalidUrl)
-            }
-            Self::CheckUrl(url) => {
-                let path: String = self.into();
-                http::Uri::try_from(format!("{}?url={}", path, url))
-                    .map_err(LinkDingError::InvalidUrl)
-            }
-            Self::GetBookmark(_)
-            | Self::UpdateBookmark(_)
-            | Self::ArchiveBookmark(_)
-            | Self::UnarchiveBookmark(_)
-            | Self::DeleteBookmark(_)
-            | Self::CreateBookmark
-            | Self::GetTag(_)
-            | Self::CreateTag
-            | Self::GetUserProfile
-            | Self::ListBookmarkAssets(_)
-            | Self::RetrieveBookmarkAsset(_, _)
-            | Self::DownloadBookmarkAsset(_, _)
-            | Self::UploadBookmarkAsset(_)
-            | Self::DeleteBookmarkAsset(_, _) => {
-                let path: String = self.into();
-                http::Uri::try_from(path).map_err(LinkDingError::InvalidUrl)
-            }
-        }
-    }
-}
-
 impl QueryString for Endpoint {
     fn query_string(&self) -> String {
         match self {
@@ -124,7 +85,7 @@ impl QueryString for Endpoint {
 
 impl From<Endpoint> for String {
     fn from(val: Endpoint) -> Self {
-        match &val {
+        let path = match &val {
             Endpoint::ListBookmarks(_) => "/api/bookmarks/".to_string(),
             Endpoint::ListArchivedBookmarks(_) => "/api/bookmarks/archived/".to_string(),
             Endpoint::GetBookmark(id)
@@ -149,38 +110,65 @@ impl From<Endpoint> for String {
                 bookmark_id, asset_id
             ),
             Endpoint::UploadBookmarkAsset(id) => format!("/api/bookmarks/{}/assets/upload/", id),
+        };
+        match &val {
+            Endpoint::ListBookmarks(args) | Endpoint::ListArchivedBookmarks(args) => {
+                let query_string = args.query_string();
+                format!("{}?{}", path, query_string)
+            }
+            Endpoint::ListTags(args) => {
+                let query_string = args.query_string();
+                format!("{}?{}", path, query_string)
+            }
+            Endpoint::CheckUrl(url) => {
+                format!("{}?url={}", path, url)
+            }
+            Endpoint::GetBookmark(_)
+            | Endpoint::UpdateBookmark(_)
+            | Endpoint::ArchiveBookmark(_)
+            | Endpoint::UnarchiveBookmark(_)
+            | Endpoint::DeleteBookmark(_)
+            | Endpoint::CreateBookmark
+            | Endpoint::GetTag(_)
+            | Endpoint::CreateTag
+            | Endpoint::GetUserProfile
+            | Endpoint::ListBookmarkAssets(_)
+            | Endpoint::RetrieveBookmarkAsset(_, _)
+            | Endpoint::DownloadBookmarkAsset(_, _)
+            | Endpoint::UploadBookmarkAsset(_)
+            | Endpoint::DeleteBookmarkAsset(_, _) => path,
         }
     }
 }
 
-impl From<Endpoint> for http::Method {
+impl From<Endpoint> for reqwest::Method {
     fn from(val: Endpoint) -> Self {
         match val {
-            Endpoint::ListBookmarks(_) => http::Method::GET,
-            Endpoint::ListArchivedBookmarks(_) => http::Method::GET,
-            Endpoint::GetBookmark(_) => http::Method::GET,
-            Endpoint::CheckUrl(_) => http::Method::GET,
-            Endpoint::CreateBookmark => http::Method::POST,
-            Endpoint::UpdateBookmark(_) => http::Method::PATCH,
-            Endpoint::ArchiveBookmark(_) => http::Method::POST,
-            Endpoint::UnarchiveBookmark(_) => http::Method::POST,
-            Endpoint::DeleteBookmark(_) => http::Method::DELETE,
-            Endpoint::ListTags(_) => http::Method::GET,
-            Endpoint::GetTag(_) => http::Method::GET,
-            Endpoint::CreateTag => http::Method::POST,
-            Endpoint::GetUserProfile => http::Method::GET,
-            Endpoint::ListBookmarkAssets(_) => http::Method::GET,
-            Endpoint::RetrieveBookmarkAsset(_, _) => http::Method::GET,
-            Endpoint::DownloadBookmarkAsset(_, _) => http::Method::GET,
-            Endpoint::UploadBookmarkAsset(_) => http::Method::POST,
-            Endpoint::DeleteBookmarkAsset(_, _) => http::Method::DELETE,
+            Endpoint::ListBookmarks(_) => reqwest::Method::GET,
+            Endpoint::ListArchivedBookmarks(_) => reqwest::Method::GET,
+            Endpoint::GetBookmark(_) => reqwest::Method::GET,
+            Endpoint::CheckUrl(_) => reqwest::Method::GET,
+            Endpoint::CreateBookmark => reqwest::Method::POST,
+            Endpoint::UpdateBookmark(_) => reqwest::Method::PATCH,
+            Endpoint::ArchiveBookmark(_) => reqwest::Method::POST,
+            Endpoint::UnarchiveBookmark(_) => reqwest::Method::POST,
+            Endpoint::DeleteBookmark(_) => reqwest::Method::DELETE,
+            Endpoint::ListTags(_) => reqwest::Method::GET,
+            Endpoint::GetTag(_) => reqwest::Method::GET,
+            Endpoint::CreateTag => reqwest::Method::POST,
+            Endpoint::GetUserProfile => reqwest::Method::GET,
+            Endpoint::ListBookmarkAssets(_) => reqwest::Method::GET,
+            Endpoint::RetrieveBookmarkAsset(_, _) => reqwest::Method::GET,
+            Endpoint::DownloadBookmarkAsset(_, _) => reqwest::Method::GET,
+            Endpoint::UploadBookmarkAsset(_) => reqwest::Method::POST,
+            Endpoint::DeleteBookmarkAsset(_, _) => reqwest::Method::DELETE,
         }
     }
 }
 
-impl From<Endpoint> for http::HeaderMap {
+impl From<Endpoint> for reqwest::header::HeaderMap {
     fn from(val: Endpoint) -> Self {
-        let mut headers = http::HeaderMap::new();
+        let mut headers = reqwest::header::HeaderMap::new();
         match val {
             Endpoint::ListBookmarks(_)
             | Endpoint::ListArchivedBookmarks(_)
@@ -250,34 +238,30 @@ trait QueryString {
 pub struct LinkDingClient {
     token: String,
     url: String,
+    client: reqwest::blocking::Client,
 }
 
 impl LinkDingClient {
-    fn prepare_request(&self, endpoint: Endpoint) -> Result<http::request::Builder, LinkDingError> {
-        let uri: http::Uri = self.url.parse()?;
-        let path_and_query_uri: http::Uri = endpoint.clone().try_into()?;
-        let uri = http::uri::Builder::from(uri)
-            .path_and_query(path_and_query_uri.to_string())
-            .build()
-            .map_err(LinkDingError::ParseUrlError)?;
-
-        let mut builder = http::request::Builder::new()
-            .method(endpoint.clone())
-            .uri(uri);
-
-        let endpoint_headers: http::HeaderMap = endpoint.clone().into();
-        let request_header_map = builder
-            .headers_mut()
-            .expect("Could not get mutable reference to request headers");
-        for (header_key, header_value) in endpoint_headers.iter() {
-            request_header_map.insert(header_key.clone(), header_value.clone());
-        }
-        request_header_map.insert(
+    fn prepare_request(
+        &self,
+        endpoint: Endpoint,
+    ) -> Result<reqwest::blocking::RequestBuilder, LinkDingError> {
+        let base_url: reqwest::Url = self.url.parse().map_err(LinkDingError::ParseUrl)?;
+        let path_and_query: String = endpoint.clone().into();
+        let url = base_url
+            .join(&path_and_query)
+            .map_err(LinkDingError::ParseUrl)?;
+        let method: reqwest::Method = endpoint.clone().into();
+        let mut endpoint_headers: reqwest::header::HeaderMap = endpoint.clone().into();
+        endpoint_headers.insert(
             AUTHORIZATION,
             format!("Token {}", &self.token)
                 .parse()
                 .expect("Could not parse authorization header value"),
         );
+
+        let builder = self.client.request(method, url).headers(endpoint_headers);
+
         Ok(builder)
     }
 }
@@ -289,6 +273,7 @@ impl LinkDingClient {
         LinkDingClient {
             token: token.to_string(),
             url: url.to_string(),
+            client: reqwest::blocking::Client::new(),
         }
     }
 
@@ -298,8 +283,9 @@ impl LinkDingClient {
         args: ListBookmarksArgs,
     ) -> Result<ListBookmarksResponse, LinkDingError> {
         let endpoint = Endpoint::ListBookmarks(args);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: ListBookmarksResponse = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: ListBookmarksResponse = self.client.execute(request)?.json()?;
+
         Ok(body)
     }
 
@@ -309,16 +295,16 @@ impl LinkDingClient {
         args: ListBookmarksArgs,
     ) -> Result<ListBookmarksResponse, LinkDingError> {
         let endpoint = Endpoint::ListArchivedBookmarks(args);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: ListBookmarksResponse = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: ListBookmarksResponse = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
     /// Get a bookmark by ID
     pub fn get_bookmark(&self, id: i32) -> Result<Bookmark, LinkDingError> {
         let endpoint = Endpoint::GetBookmark(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: Bookmark = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -329,8 +315,8 @@ impl LinkDingClient {
     /// webpage will always be returned.
     pub fn check_url(&self, url: &str) -> Result<CheckUrlResponse, LinkDingError> {
         let endpoint = Endpoint::CheckUrl(url.to_string());
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: CheckUrlResponse = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: CheckUrlResponse = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -341,8 +327,9 @@ impl LinkDingClient {
         let endpoint = Endpoint::CreateBookmark;
         let request = self
             .prepare_request(endpoint)?
-            .body(serde_json::to_string(&body)?)?;
-        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
+            .body(serde_json::to_string(&body)?)
+            .build()?;
+        let body: Bookmark = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -357,45 +344,50 @@ impl LinkDingClient {
         let endpoint = Endpoint::UpdateBookmark(id);
         let request = self
             .prepare_request(endpoint)?
-            .body(serde_json::to_string(&body)?)?;
-        let body: Bookmark = ureq::run(request)?.body_mut().read_json()?;
+            .body(serde_json::to_string(&body)?)
+            .build()?;
+        let body: Bookmark = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
     /// Archive a bookmark
     pub fn archive_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::ArchiveBookmark(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
+        let request = self.prepare_request(endpoint)?.build()?;
+        let response = self.client.execute(request)?;
+
+        Ok(response.status() == StatusCode::NO_CONTENT)
     }
 
     /// Take a bookmark out of the archive
     pub fn unarchive_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::UnarchiveBookmark(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
+        let request = self.prepare_request(endpoint)?.build()?;
+        let response = self.client.execute(request)?;
+        Ok(response.status() == StatusCode::NO_CONTENT)
     }
 
     /// Delete a bookmark
     pub fn delete_bookmark(&self, id: i32) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::DeleteBookmark(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
+        let request = self.prepare_request(endpoint)?.build()?;
+        let response = self.client.execute(request)?;
+        Ok(response.status() == StatusCode::NO_CONTENT)
     }
 
     /// List tags
     pub fn list_tags(&self, args: ListTagsArgs) -> Result<ListTagsResponse, LinkDingError> {
         let endpoint = Endpoint::ListTags(args);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: ListTagsResponse = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: ListTagsResponse = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
     /// Get a tag by ID
     pub fn get_tag(&self, id: i32) -> Result<TagData, LinkDingError> {
         let endpoint = Endpoint::GetTag(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: TagData = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: TagData = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -405,16 +397,17 @@ impl LinkDingClient {
         let body = serde_json::json!({ "name": name });
         let request = self
             .prepare_request(endpoint)?
-            .body(serde_json::to_string(&body)?)?;
-        let body: TagData = ureq::run(request)?.body_mut().read_json()?;
+            .body(serde_json::to_string(&body)?)
+            .build()?;
+        let body: TagData = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
     /// Get the user's profile
     pub fn get_user_profile(&self) -> Result<UserProfile, LinkDingError> {
         let endpoint = Endpoint::GetUserProfile;
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: UserProfile = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: UserProfile = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -424,8 +417,8 @@ impl LinkDingClient {
         id: i32,
     ) -> Result<ListBookmarkAssetsResponse, LinkDingError> {
         let endpoint = Endpoint::ListBookmarkAssets(id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: ListBookmarkAssetsResponse = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: ListBookmarkAssetsResponse = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -436,8 +429,8 @@ impl LinkDingClient {
         asset_id: i32,
     ) -> Result<BookmarkAsset, LinkDingError> {
         let endpoint = Endpoint::RetrieveBookmarkAsset(bookmark_id, asset_id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let body: BookmarkAsset = ureq::run(request)?.body_mut().read_json()?;
+        let request = self.prepare_request(endpoint)?.build()?;
+        let body: BookmarkAsset = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -448,9 +441,10 @@ impl LinkDingClient {
         asset_id: i32,
     ) -> Result<Vec<u8>, LinkDingError> {
         let endpoint = Endpoint::DownloadBookmarkAsset(bookmark_id, asset_id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        let mut response = ureq::run(request)?;
-        Ok(response.body_mut().read_to_vec()?)
+        let request = self.prepare_request(endpoint)?.build()?;
+        let mut buffer: Vec<u8> = Vec::new();
+        self.client.execute(request)?.read_to_end(&mut buffer)?;
+        Ok(buffer)
     }
 
     /// Upload an asset for a bookmark
@@ -460,8 +454,10 @@ impl LinkDingClient {
         bytes: &[u8],
     ) -> Result<BookmarkAsset, LinkDingError> {
         let endpoint = Endpoint::UploadBookmarkAsset(bookmark_id);
-        let request = self.prepare_request(endpoint)?.body(bytes)?;
-        let body: BookmarkAsset = ureq::run(request)?.body_mut().read_json()?;
+        let bytes_part = Part::bytes(bytes.to_owned());
+        let form = reqwest::blocking::multipart::Form::new().part("file", bytes_part);
+        let request = self.prepare_request(endpoint)?.multipart(form).build()?;
+        let body: BookmarkAsset = self.client.execute(request)?.json()?;
         Ok(body)
     }
 
@@ -472,7 +468,8 @@ impl LinkDingClient {
         asset_id: i32,
     ) -> Result<bool, LinkDingError> {
         let endpoint = Endpoint::DeleteBookmarkAsset(bookmark_id, asset_id);
-        let request = self.prepare_request(endpoint)?.body(())?;
-        Ok(ureq::run(request)?.status() == http::StatusCode::NO_CONTENT)
+        let request = self.prepare_request(endpoint)?.build()?;
+        let response = self.client.execute(request)?;
+        Ok(response.status() == StatusCode::NO_CONTENT)
     }
 }
