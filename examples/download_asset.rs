@@ -14,7 +14,7 @@ fn main() {
         .expect("Could not download asset");
 
     let mut asset_file =
-        File::create("asset.gzip").expect("Could not create/overwrite the file asset.gzip");
+        File::create("asset.html").expect("Could not create/overwrite the file asset.html");
     asset_file
         .write(&result)
         .expect("Could not write to asset file");
