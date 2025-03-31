@@ -6,8 +6,6 @@ pub mod bookmarks;
 pub mod tags;
 pub mod users;
 
-use std::io::Read;
-
 use bookmark_assets::{BookmarkAsset, ListBookmarkAssetsResponse};
 pub use bookmarks::{
     Bookmark, CheckUrlResponse, CreateBookmarkBody, ListBookmarksArgs, ListBookmarksResponse,
@@ -200,7 +198,9 @@ impl From<Endpoint> for reqwest::header::HeaderMap {
                         .expect("Could not parse accept header value"),
                 );
             }
-            Endpoint::DownloadBookmarkAsset(_, _) => {}
+            Endpoint::DownloadBookmarkAsset(_, _) => {
+                headers.insert(ACCEPT, reqwest::header::HeaderValue::from_static("*/*"));
+            }
         };
         headers
     }
@@ -273,7 +273,9 @@ impl LinkDingClient {
         LinkDingClient {
             token: token.to_string(),
             url: url.to_string(),
-            client: reqwest::blocking::Client::new(),
+            client: reqwest::blocking::Client::builder()
+                .build()
+                .expect("Could not create web client"),
         }
     }
 
@@ -442,9 +444,8 @@ impl LinkDingClient {
     ) -> Result<Vec<u8>, LinkDingError> {
         let endpoint = Endpoint::DownloadBookmarkAsset(bookmark_id, asset_id);
         let request = self.prepare_request(endpoint)?.build()?;
-        let mut buffer: Vec<u8> = Vec::new();
-        self.client.execute(request)?.read_to_end(&mut buffer)?;
-        Ok(buffer)
+        let response = self.client.execute(request)?;
+        Ok(response.bytes()?.into())
     }
 
     /// Upload an asset for a bookmark
