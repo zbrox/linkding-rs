@@ -45,3 +45,7 @@ required-features = ["blocking"]
 [[example]]
 name = "upload_asset"
 required-features = ["blocking"]
+
+[[example]]
+name = "count_bookmarks_async"
+required-features = ["async"]
