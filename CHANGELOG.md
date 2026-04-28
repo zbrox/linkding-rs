@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/zbrox/linkding-rs/compare/v0.3.0...v0.4.0) - 2026-04-28
+
+### Added
+
+- add async client
+- [**breaking**] gate sync client behind blocking feature; add tls features
+- [**breaking**] extend bookmark and asset types
+
+### Other
+
+- Merge pull request #5 from zbrox/feat/async-client
+- note async support and add async example
+- [**breaking**] prep request handling for async client
+
 ## [0.3.0](https://github.com/zbrox/linkding-rs/compare/v0.2.0...v0.3.0) - 2025-05-19
 
 ### Added
