@@ -122,6 +122,8 @@ pub struct ListBookmarksArgs {
     pub query: Option<String>,
     pub limit: Option<i32>,
     pub offset: Option<i32>,
+    /// Return only bookmarks modified since this RFC 3339 timestamp.
+    pub modified_since: Option<String>,
 }
 
 impl QueryString for ListBookmarksArgs {
@@ -130,10 +132,52 @@ impl QueryString for ListBookmarksArgs {
             ("q", self.query.as_ref().map(|v| v.to_string())),
             ("limit", self.limit.as_ref().map(|v| v.to_string())),
             ("offset", self.offset.as_ref().map(|v| v.to_string())),
+            (
+                "modified_since",
+                self.modified_since.as_ref().map(|v| v.to_string()),
+            ),
         ]
         .iter()
         .filter_map(|(k, v)| v.as_ref().map(|v| format!("{}={}", k, v)))
         .collect::<Vec<_>>()
         .join("&")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_bookmarks_args_emits_modified_since_only() {
+        let args = ListBookmarksArgs {
+            modified_since: Some("2026-01-01T00:00:00Z".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            args.query_string(),
+            "modified_since=2026-01-01T00:00:00Z"
+        );
+    }
+
+    #[test]
+    fn list_bookmarks_args_emits_all_fields() {
+        let args = ListBookmarksArgs {
+            query: Some("rust".to_string()),
+            limit: Some(50),
+            offset: Some(10),
+            modified_since: Some("2026-01-01T00:00:00Z".to_string()),
+        };
+        let qs = args.query_string();
+        assert!(qs.contains("q=rust"), "{qs}");
+        assert!(qs.contains("limit=50"), "{qs}");
+        assert!(qs.contains("offset=10"), "{qs}");
+        assert!(qs.contains("modified_since=2026-01-01T00:00:00Z"), "{qs}");
+    }
+
+    #[test]
+    fn list_bookmarks_args_default_is_empty_query() {
+        let args = ListBookmarksArgs::default();
+        assert_eq!(args.query_string(), "");
     }
 }
