@@ -13,9 +13,8 @@ fn main() {
     loop {
         let response = linkding_client
             .list_bookmarks(ListBookmarksArgs {
-                query: None,
-                limit: None,
                 offset: Some(offset),
+                ..Default::default()
             })
             .expect("Couldn't fetch bookmarks");
         total_bookmarks += response.results.len();
