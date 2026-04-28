@@ -11,16 +11,37 @@ crate-type = ["lib", "cdylib", "staticlib"]
 name = "linkding"
 
 [features]
-ffi = ["uniffi"]
+default = ["blocking", "async", "rustls-tls"]
+blocking = ["reqwest/blocking", "reqwest/multipart"]
+async = ["reqwest/multipart"]
+rustls-tls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]
+ffi = ["uniffi", "blocking"]
 
 [dependencies]
 http-serde = "2.1.1"
-reqwest = { version = "0.12.15", features = ["blocking", "multipart", "gzip", "json", "brotli", "deflate"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["json", "gzip", "brotli", "deflate"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 thiserror = "2.0.12"
 uniffi = { version = "0.29.2", optional = true }
 url = "2.5.4"
 
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+wiremock = "0.6"
+
 [build-dependencies]
 uniffi = { version = "0.29.2", features = ["build"] }
+
+[[example]]
+name = "count_bookmarks"
+required-features = ["blocking"]
+
+[[example]]
+name = "download_asset"
+required-features = ["blocking"]
+
+[[example]]
+name = "upload_asset"
+required-features = ["blocking"]
