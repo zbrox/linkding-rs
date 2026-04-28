@@ -16,6 +16,11 @@ mod sync_client;
 #[cfg(feature = "blocking")]
 pub use sync_client::LinkDingClient;
 
+#[cfg(feature = "async")]
+mod async_client;
+#[cfg(feature = "async")]
+pub use async_client::LinkDingAsyncClient;
+
 pub use bookmarks::{
     Bookmark, CheckUrlResponse, CreateBookmarkBody, ListBookmarksArgs, ListBookmarksResponse,
     UpdateBookmarkBody,
