@@ -28,8 +28,6 @@ pub enum LinkDingError {
     ParseUrl(url::ParseError),
     #[error("Error sending HTTP request")]
     SendHttpError(#[from] reqwest::Error),
-    #[error("Could not parse response from API")]
-    ParseResponse(#[from] std::io::Error),
     #[error("Could not serialize JSON body")]
     JsonSerialize(#[from] serde_json::Error),
 }
@@ -210,6 +208,37 @@ trait QueryString {
     fn query_string(&self) -> String;
 }
 
+pub(crate) struct RequestSpec {
+    pub url: reqwest::Url,
+    pub method: reqwest::Method,
+    pub headers: reqwest::header::HeaderMap,
+}
+
+pub(crate) fn build_request_spec(
+    base_url: &str,
+    token: &str,
+    endpoint: Endpoint,
+) -> Result<RequestSpec, LinkDingError> {
+    let base: reqwest::Url = base_url.parse().map_err(LinkDingError::ParseUrl)?;
+    let path_and_query: String = endpoint.clone().into();
+    let url = base
+        .join(&path_and_query)
+        .map_err(LinkDingError::ParseUrl)?;
+    let method: reqwest::Method = endpoint.clone().into();
+    let mut headers: reqwest::header::HeaderMap = endpoint.into();
+    headers.insert(
+        AUTHORIZATION,
+        format!("Token {}", token)
+            .parse()
+            .expect("Could not parse authorization header value"),
+    );
+    Ok(RequestSpec {
+        url,
+        method,
+        headers,
+    })
+}
+
 /// A sync client for the LinkDing API.
 ///
 /// This client is used to interact with the LinkDing API. It provides methods for
@@ -246,23 +275,8 @@ impl LinkDingClient {
         &self,
         endpoint: Endpoint,
     ) -> Result<reqwest::blocking::RequestBuilder, LinkDingError> {
-        let base_url: reqwest::Url = self.url.parse().map_err(LinkDingError::ParseUrl)?;
-        let path_and_query: String = endpoint.clone().into();
-        let url = base_url
-            .join(&path_and_query)
-            .map_err(LinkDingError::ParseUrl)?;
-        let method: reqwest::Method = endpoint.clone().into();
-        let mut endpoint_headers: reqwest::header::HeaderMap = endpoint.clone().into();
-        endpoint_headers.insert(
-            AUTHORIZATION,
-            format!("Token {}", &self.token)
-                .parse()
-                .expect("Could not parse authorization header value"),
-        );
-
-        let builder = self.client.request(method, url).headers(endpoint_headers);
-
-        Ok(builder)
+        let spec = build_request_spec(&self.url, &self.token, endpoint)?;
+        Ok(self.client.request(spec.method, spec.url).headers(spec.headers))
     }
 }
 
