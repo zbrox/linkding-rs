@@ -128,19 +128,20 @@ pub struct ListBookmarksArgs {
 
 impl QueryString for ListBookmarksArgs {
     fn query_string(&self) -> String {
-        [
-            ("q", self.query.as_ref().map(|v| v.to_string())),
-            ("limit", self.limit.as_ref().map(|v| v.to_string())),
-            ("offset", self.offset.as_ref().map(|v| v.to_string())),
-            (
-                "modified_since",
-                self.modified_since.as_ref().map(|v| v.to_string()),
-            ),
-        ]
-        .iter()
-        .filter_map(|(k, v)| v.as_ref().map(|v| format!("{}={}", k, v)))
-        .collect::<Vec<_>>()
-        .join("&")
+        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+        if let Some(query) = &self.query {
+            serializer.append_pair("q", query);
+        }
+        if let Some(limit) = self.limit {
+            serializer.append_pair("limit", &limit.to_string());
+        }
+        if let Some(offset) = self.offset {
+            serializer.append_pair("offset", &offset.to_string());
+        }
+        if let Some(modified_since) = &self.modified_since {
+            serializer.append_pair("modified_since", modified_since);
+        }
+        serializer.finish()
     }
 }
 
@@ -154,7 +155,10 @@ mod tests {
             modified_since: Some("2026-01-01T00:00:00Z".to_string()),
             ..Default::default()
         };
-        assert_eq!(args.query_string(), "modified_since=2026-01-01T00:00:00Z");
+        assert_eq!(
+            args.query_string(),
+            "modified_since=2026-01-01T00%3A00%3A00Z"
+        );
     }
 
     #[test]
@@ -169,7 +173,10 @@ mod tests {
         assert!(qs.contains("q=rust"), "{qs}");
         assert!(qs.contains("limit=50"), "{qs}");
         assert!(qs.contains("offset=10"), "{qs}");
-        assert!(qs.contains("modified_since=2026-01-01T00:00:00Z"), "{qs}");
+        assert!(
+            qs.contains("modified_since=2026-01-01T00%3A00%3A00Z"),
+            "{qs}"
+        );
     }
 
     #[test]

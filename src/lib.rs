@@ -127,7 +127,10 @@ impl From<Endpoint> for String {
                 format!("{}?{}", path, query_string)
             }
             Endpoint::CheckUrl(url) => {
-                format!("{}?url={}", path, url)
+                let query_string = url::form_urlencoded::Serializer::new(String::new())
+                    .append_pair("url", url)
+                    .finish();
+                format!("{}?{}", path, query_string)
             }
             Endpoint::GetBookmark(_)
             | Endpoint::UpdateBookmark(_)
