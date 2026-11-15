@@ -41,12 +41,10 @@ fn list_bookmarks_sends_modified_since_and_auth_header() {
             .and(query_param("modified_since", "2026-01-01T00:00:00Z"))
             .and(query_param("limit", "50"))
             .and(header("authorization", format!("Token {TOKEN}").as_str()))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string(format!(
-                    r#"{{"count":1,"next":null,"previous":null,"results":[{}]}}"#,
-                    SINGLE_BOOKMARK_PAYLOAD
-                )),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+                r#"{{"count":1,"next":null,"previous":null,"results":[{}]}}"#,
+                SINGLE_BOOKMARK_PAYLOAD
+            )))
             .expect(1)
             .mount(&server)
             .await;
@@ -62,6 +60,106 @@ fn list_bookmarks_sends_modified_since_and_auth_header() {
         .expect("list_bookmarks");
     assert_eq!(resp.count, 1);
     assert_eq!(resp.results[0].id, 42);
+}
+
+#[test]
+fn list_bookmarks_preserves_hash_in_search_query() {
+    let (_rt, server) = with_mock_server(async {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/bookmarks/"))
+            .and(query_param("q", "#rust"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"count":0,"next":null,"previous":null,"results":[]}"#),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        server
+    });
+
+    client(&server)
+        .list_bookmarks(ListBookmarksArgs {
+            query: Some("#rust".to_string()),
+            ..Default::default()
+        })
+        .expect("list_bookmarks");
+}
+
+#[test]
+fn list_bookmarks_preserves_pagination_after_hash_in_search_query() {
+    let (_rt, server) = with_mock_server(async {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/bookmarks/"))
+            .and(query_param("q", "#rust"))
+            .and(query_param("limit", "50"))
+            .and(query_param("offset", "10"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"count":0,"next":null,"previous":null,"results":[]}"#),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        server
+    });
+
+    client(&server)
+        .list_bookmarks(ListBookmarksArgs {
+            query: Some("#rust".to_string()),
+            limit: Some(50),
+            offset: Some(10),
+            ..Default::default()
+        })
+        .expect("list_bookmarks");
+}
+
+#[test]
+fn list_archived_bookmarks_preserves_hash_in_search_query() {
+    let (_rt, server) = with_mock_server(async {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/bookmarks/archived/"))
+            .and(query_param("q", "#rust"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"count":0,"next":null,"previous":null,"results":[]}"#),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        server
+    });
+
+    client(&server)
+        .list_archived_bookmarks(ListBookmarksArgs {
+            query: Some("#rust".to_string()),
+            ..Default::default()
+        })
+        .expect("list_archived_bookmarks");
+}
+
+#[test]
+fn check_url_preserves_query_and_fragment_in_url_parameter() {
+    let (_rt, server) = with_mock_server(async {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/bookmarks/check/"))
+            .and(query_param("url", "https://example.com/?a=1&b=2#section"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"{"bookmark":null,"metadata":{"url":"https://example.com/?a=1&b=2#section","title":null,"description":null,"preview_image":null},"auto_tags":[]}"#,
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+        server
+    });
+
+    client(&server)
+        .check_url("https://example.com/?a=1&b=2#section")
+        .expect("check_url");
 }
 
 #[test]
@@ -81,12 +179,24 @@ fn list_assets_handles_all_variants_including_unknown() {
         .list_bookmark_assets(42)
         .expect("list_bookmark_assets");
     assert_eq!(resp.results.len(), 4);
-    assert!(matches!(resp.results[0].asset_type, BookmarkAssetType::Snapshot));
+    assert!(matches!(
+        resp.results[0].asset_type,
+        BookmarkAssetType::Snapshot
+    ));
     assert_eq!(resp.results[0].file_size, Some(12345));
-    assert!(matches!(resp.results[1].asset_type, BookmarkAssetType::Upload));
+    assert!(matches!(
+        resp.results[1].asset_type,
+        BookmarkAssetType::Upload
+    ));
     assert_eq!(resp.results[1].file_size, None);
-    assert!(matches!(resp.results[2].asset_type, BookmarkAssetType::Precrawled));
-    assert!(matches!(resp.results[3].asset_type, BookmarkAssetType::Unknown));
+    assert!(matches!(
+        resp.results[2].asset_type,
+        BookmarkAssetType::Precrawled
+    ));
+    assert!(matches!(
+        resp.results[3].asset_type,
+        BookmarkAssetType::Unknown
+    ));
 }
 
 #[test]

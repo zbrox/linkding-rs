@@ -202,8 +202,7 @@ impl LinkDingAsyncClient {
     ) -> Result<ListBookmarkAssetsResponse, LinkDingError> {
         let endpoint = Endpoint::ListBookmarkAssets(id);
         let request = self.prepare_request(endpoint)?.build()?;
-        let body: ListBookmarkAssetsResponse =
-            self.client.execute(request).await?.json().await?;
+        let body: ListBookmarkAssetsResponse = self.client.execute(request).await?.json().await?;
         Ok(body)
     }
 

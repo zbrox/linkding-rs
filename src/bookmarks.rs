@@ -154,10 +154,7 @@ mod tests {
             modified_since: Some("2026-01-01T00:00:00Z".to_string()),
             ..Default::default()
         };
-        assert_eq!(
-            args.query_string(),
-            "modified_since=2026-01-01T00:00:00Z"
-        );
+        assert_eq!(args.query_string(), "modified_since=2026-01-01T00:00:00Z");
     }
 
     #[test]
